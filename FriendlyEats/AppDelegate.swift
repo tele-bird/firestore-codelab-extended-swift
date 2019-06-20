@@ -24,6 +24,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
     FirebaseApp.configure()
+    DynamicLinks.performDiagnostics(completion: nil)
 
     // Globally set our navigation bar style
     let navigationStyles = UINavigationBar.appearance()
@@ -33,6 +34,56 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     navigationStyles.titleTextAttributes = [ NSAttributedString.Key.foregroundColor: UIColor.white]
     return true
   }
+
+    func handleIncomingDynamicLink (_ dynamicLink: DynamicLink) {
+        guard let url = dynamicLink.url else {
+            print("That's weird. My dynamic link object has no URL.")
+            return
+        }
+        print("Your incoming link parameter is \(url.absoluteString)")
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+            let queryItems = components.queryItems else { return }
+        for queryItem in queryItems {
+            print("Parameter \(queryItem.name) has a value of \(queryItem.value ?? "")")
+        }
+        print("Dyanmic link match type is \(dynamicLink.matchType.rawValue)")
+    }
+    
+    func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
+        if let incomingURL = userActivity.webpageURL {
+            print("Incoming URL is \(incomingURL)")
+            let linkHandled = DynamicLinks.dynamicLinks().handleUniversalLink(incomingURL) { (dynamicLink, error) in
+                guard error == nil else {
+                    print("Found an error! \(error!.localizedDescription)")
+                    return
+                }
+                if let dynamicLink = dynamicLink {
+                    print(dynamicLink.url?.absoluteString)
+                    self.handleIncomingDynamicLink(dynamicLink)
+                }
+            }
+            if linkHandled {
+                print("Link handled")
+                return true
+            } else {
+                // Maybe do other things with incoming URLs?
+                print("Link not handled")
+                return false
+            }
+        }
+        return false
+    }
+    
+    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        print("I have received a URL through a custom scheme! \(url.absoluteString)")
+        if let dynamicLink = DynamicLinks.dynamicLinks().dynamicLink(fromCustomSchemeURL: url) {
+            self.handleIncomingDynamicLink(dynamicLink)
+            return true
+        } else {
+            // Maybe handle Google or Facebook sign-in here
+            return false
+        }
+    }
 
 }
 
